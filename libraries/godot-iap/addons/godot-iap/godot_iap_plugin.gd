@@ -8,13 +8,26 @@ var _export_plugin: GodotIapExportPlugin
 
 func _enter_tree() -> void:
 	if not ProjectSettings.has_setting("autoload/" + AUTOLOAD_NAME):
-		add_autoload_singleton(AUTOLOAD_NAME, "res://addons/godot-iap/godot_iap.gd")
-		_owned_autoload = ProjectSettings.get_setting("autoload/" + AUTOLOAD_NAME, "")
+		if _user_already_autoloads_iap():
+			# A user-registered autoload plus ours would run two wrappers (hyochan/godot-iap#24).
+			print("[GodotIap] godot_iap.gd is already registered as an autoload; skipping the plugin autoload to avoid a duplicate instance.")
+		else:
+			add_autoload_singleton(AUTOLOAD_NAME, "res://addons/godot-iap/godot_iap.gd")
+			_owned_autoload = ProjectSettings.get_setting("autoload/" + AUTOLOAD_NAME, "")
 
 	_export_plugin = GodotIapExportPlugin.new()
 	add_export_plugin(_export_plugin)
 
 	print("[GodotIap] Plugin enabled")
+
+func _user_already_autoloads_iap() -> bool:
+	for property in ProjectSettings.get_property_list():
+		var setting_name := String(property.get("name", ""))
+		if setting_name.begins_with("autoload/") and setting_name != "autoload/" + AUTOLOAD_NAME:
+			var path := String(ProjectSettings.get_setting(setting_name, ""))
+			if path.trim_prefix("*").ends_with("godot-iap/godot_iap.gd"):
+				return true
+	return false
 
 func _exit_tree() -> void:
 	if not _owned_autoload.is_empty() and ProjectSettings.get_setting("autoload/" + AUTOLOAD_NAME, "") == _owned_autoload:
