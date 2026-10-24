@@ -103,6 +103,10 @@ var debug_logging := false
 var _native_plugin: Object = null
 ## Every wrapper shares one native plugin: the Apple GDExtension object owns the StoreKit listeners.
 static var _shared_native_plugin: Object = null
+## The one live wrapper that connected the shared native plugin's signals (hyochan/godot-iap#24).
+static var _shared_signal_owner: Object = null
+## True when another live wrapper owns the native signals; this one stays inert.
+var _is_duplicate_instance: bool = false
 var _is_connected: bool = false
 ## True once _ready() set this wrapper up; tests set it early to keep injected fakes.
 var _is_initialized: bool = false
@@ -152,6 +156,8 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	if _shared_signal_owner == self:
+		_shared_signal_owner = null
 	_cancel_pending_apple_async(
 		"service-disconnected",
 		"The IAP wrapper left the scene tree before the operation completed"
@@ -164,10 +170,15 @@ func _init_native_plugin() -> void:
 	_native_plugin = _shared_native_plugin
 	if _native_plugin == null:
 		_log("Native plugin not available - expected in the editor or on desktop")
+	elif _shared_signal_owner != null and _shared_signal_owner != self and is_instance_valid(_shared_signal_owner):
+		_is_duplicate_instance = true
+		push_warning("[GodotIap] Duplicate GodotIap instance: native signals stay with the first instance. Use that instance (e.g. the GodotIapPlugin autoload) instead of attaching godot_iap.gd again.")
 	elif _is_apple():
 		_connect_signals_apple()
+		_shared_signal_owner = self
 	elif _platform == "Android":
 		_connect_signals_android()
+		_shared_signal_owner = self
 
 
 func _load_native_plugin() -> Object:
